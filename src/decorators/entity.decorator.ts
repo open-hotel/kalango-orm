@@ -6,7 +6,7 @@ export function Entity(name?: string, { waitForSync = false } = {}): ClassDecora
     Reflect.defineMetadata(ENTITY_NAME, name, target);
     Reflect.defineMetadata(ENTITY_ATTRIBUTES, {}, target);
     Reflect.defineMetadata(ENTITY_WAIT_FOR_SYNC, waitForSync, target);
-    Reflect.defineMetadata(ENTITY_INDEXES, {}, target)
+    Reflect.defineMetadata(ENTITY_INDEXES, [], target)
   };
 }
 

@@ -60,6 +60,7 @@ export class Connection {
       const collection = this.db.collection(name)
 
       if (!(await collection.exists())) {
+        this.log(`Creating "${name}" collection...`)
         await collection.create({
           waitForSync: !!Reflect.getMetadata(ENTITY_WAIT_FOR_SYNC, entity),
         })
@@ -71,9 +72,17 @@ export class Connection {
         if (collectionIndexes.find(idx => index.id === idx.id || index.name === idx.name)) {
           continue
         }
-        
+        this.log(`Creating Index "${index.name}" in "${name}" collection...`)
       }
     }
+  }
+
+  log (...args) {
+    if (this.options.log) {
+      console.log(`CALANGO: `, ...args)
+    }
+
+    return this
   }
 
   async connect() {

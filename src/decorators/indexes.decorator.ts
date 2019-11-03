@@ -2,17 +2,19 @@ import { ENTITY_INDEXES } from "../keys/entity.keys";
 import { ArangoIndex } from "../types/Index";
 
 export function Index(
-  attributes: string | string[],
   options: Partial<ArangoIndex>
 ): PropertyDecorator | ClassDecorator {
   options.fields = options.fields || [];
   return function(target, key: string) {
-    if (key) attributes = key;
+    if (key) options.fields.push(key);
 
     const indexes = Reflect.getMetadata(ENTITY_INDEXES, target);
 
-    options.fields.push(key);
-    options.name = options.name || `IDX_${options.type}_${options.unique ? 'UNIQUE_' : ''}${options.fields.join('_')}`
+    options.name =
+      options.name ||
+      `IDX_${options.type}_${
+        options.unique ? "UNIQUE_" : ""
+      }${options.fields.join("_")}`;
     indexes.push(options);
 
     Reflect.defineMetadata(ENTITY_INDEXES, indexes, target);
