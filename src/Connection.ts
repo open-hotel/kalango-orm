@@ -1,96 +1,139 @@
 import { Database } from "arangojs";
 import { LoadBalancingStrategy } from "arangojs/lib/cjs/connection";
-import { ENTITY_ATTRIBUTES, ENTITY_WAIT_FOR_SYNC, ENTITY_INDEXES } from "./keys/entity.keys";
-import { ArangoIndex } from "./types/Index";
+import {
+  ENTITY_WAIT_FOR_SYNC,
+  ENTITY_INDEXES,
+  ENTITY_NAME
+} from "./keys/entity.keys";
+import { ArangoIndex } from "./types/Indexes";
+import { MetadataManager } from "./metadata/MetadataManager";
+
+function arrayIsEqual (arrA: any[], arrB:any[]) {
+  return arrA.length === arrB.length && arrB.every((a, i) => arrB[i] === a)
+}
+
+function containsIn(a: Object, b: Object) {
+  for (let k in a) {
+    if (a[k] !== b[k]) {
+      if (Array.isArray(a[k]) && arrayIsEqual(a[k], b[k])) {
+        continue
+      }
+      return false
+    }
+  }
+  return true;
+}
 
 export interface ArangoConfig {
-  url: string | string[];
-  isAbsolute: boolean;
-  arangoVersion: number;
-  loadBalancingStrategy: LoadBalancingStrategy;
-  maxRetries: false | number;
-  agent: any;
-  agentOptions: {
+  url?: string | string[];
+  isAbsolute?: boolean;
+  arangoVersion?: number;
+  loadBalancingStrategy?: LoadBalancingStrategy;
+  maxRetries?: false | number;
+  agent?: any;
+  agentOptions?: {
     [key: string]: any;
   };
-  headers: {
+  headers?: {
     [key: string]: string;
   };
 }
 
 export interface ConnectionOptions extends ArangoConfig {
-  database: string;
-  username: string;
-  password: string;
-  syncronize: boolean;
-  log: boolean;
-  entities: Function[];
+  database?: string;
+  username?: string;
+  password?: string;
+  syncronize?: boolean;
+  log?: boolean;
+  entities?: Function[];
 }
 
 export class Connection {
   public options: ConnectionOptions;
-  public db: Database;
+  public db: Database = new Database();
 
-  constructor(options: Partial<ConnectionOptions>) {
-    // this.options = {
-    //   url: "arangodb://localhost:8529",
-    //   username: "root",
-    //   password: "root",
-    //   database: "db",
-    //   syncronize: false,
-    //   log: true,
-    //   entities: [],
-    //   ...options
-    // };
+  constructor(options: ConnectionOptions) {
+    this.options = {
+      url: "arangodb://localhost:8529",
+      username: "root",
+      password: "root",
+      database: "db",
+      syncronize: false,
+      log: true,
+      entities: [],
+      ...options
+    };
+
+    this.db = new Database(this.options);
   }
 
   async sync() {
-    const { entities } = this.options
+    this.log("Sync...");
 
-    if (!(await this.db.exists())) {
-      await this.db.createDatabase(this.options.database)
-    }
+    const { entities } = this.options;
+    const entityLen = entities.length;
 
-    const entityLen = entities.length
-    
     for (let i = 0; i < entityLen; i++) {
-      const entity = entities[i]
-      const name = Reflect.getMetadata(ENTITY_ATTRIBUTES, entity)
-      const indexes = Reflect.getMetadata(ENTITY_INDEXES, entity)
-      const collection = this.db.collection(name)
+      const entity = entities[i];
+      const name = MetadataManager.get(entity, ENTITY_NAME);
+      const indexes = MetadataManager.get(entity, ENTITY_INDEXES);
+      const collection = this.db.collection(name);
 
       if (!(await collection.exists())) {
-        this.log(`Creating "${name}" collection...`)
+        this.log(`Creating "${name}" collection...`);
         await collection.create({
-          waitForSync: !!Reflect.getMetadata(ENTITY_WAIT_FOR_SYNC, entity),
-        })
+          waitForSync: !!MetadataManager.get(entity, ENTITY_WAIT_FOR_SYNC)
+        });
       }
 
-      const collectionIndexes: ArangoIndex[] = await collection.indexes()
-      
+      const collectionIndexes: ArangoIndex[] = await collection.indexes();
+      const excludedIndexes = collectionIndexes.filter(
+        idx => idx.name !== "primary" && !indexes.find(i => i.name === idx.name)
+      );
+
+      for (let index of excludedIndexes) {
+        this.log(`Droping Index "${index.name}" in "${name}" collection...`);
+        collection.dropIndex(index.name);
+      }
+
       for (let index of indexes) {
-        if (collectionIndexes.find(idx => index.id === idx.id || index.name === idx.name)) {
+        const findIndex = collectionIndexes.find(
+          idx => idx.id === index.id || idx.name === index.name
+        );
+
+        if (findIndex) {
+          if (containsIn(index, findIndex)) continue;
+          this.log(`Updating Index ${index.name} in "${name}" collection...`);
+          collection.dropIndex(index.name);
+          collection.createIndex(index);
           continue
         }
-        this.log(`Creating Index "${index.name}" in "${name}" collection...`)
+        this.log(`Creating Index ${index.name} in "${name}" collection...`);
+        collection.createIndex(index);
       }
     }
   }
 
-  log (...args) {
+  log(...args: any[]) {
     if (this.options.log) {
-      console.log(`CALANGO: `, ...args)
+      console.log(`CALANGO: `, ...args);
     }
 
-    return this
+    return this;
   }
 
   async connect() {
-    this.db = new Database(this.options);
+    this.db.useBasicAuth(this.options.username, this.options.password);
     this.db.useDatabase(this.options.database);
 
     if (this.options.syncronize) {
       await this.sync();
     }
+
+    return this;
   }
+}
+
+export function createConnection(options: Partial<ConnectionOptions>) {
+  return new Connection(options).connect();
 }

@@ -1,0 +1,18 @@
+version: "3"
+
+services:
+  mongo:
+    image: arangodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      ARANGO_ROOT_PASSWORD: root
+    ports:
+      - "8529:8529"
+    volumes:
+      - ./.docker/arangodb:/data/db
+    networks:
+      - arangodb-network
+
+networks:
+  arangodb-network:
+    driver: bridge

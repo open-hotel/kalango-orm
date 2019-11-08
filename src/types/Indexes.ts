@@ -1,5 +1,5 @@
 export interface ArangoIndex {
-  fields: string[]
+  fields: Array<string|symbol>
   id: string
   name: string
   sparse: boolean
