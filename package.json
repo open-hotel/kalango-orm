@@ -1,5 +1,5 @@
 {
-  "name": "calango-orm",
+  "name": "kalango",
   "version": "0.0.0",
   "description": "ArangoDB ORM",
   "main": "dist/index.js",

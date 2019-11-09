@@ -6,19 +6,20 @@ import {
   ENTITY_NAME
 } from "./keys/entity.keys";
 import { ArangoIndex } from "./types/Indexes";
-import { MetadataManager } from "./metadata/MetadataManager";
+import { Metadata } from "./metadata/MetadataManager";
+import { Repository } from "./Repository";
 
-function arrayIsEqual (arrA: any[], arrB:any[]) {
-  return arrA.length === arrB.length && arrB.every((a, i) => arrB[i] === a)
+function arrayIsEqual(arrA: any[], arrB: any[]) {
+  return arrA.length === arrB.length && arrA.every((a, i) => arrB[i] === a);
 }
 
 function containsIn(a: Object, b: Object) {
   for (let k in a) {
     if (a[k] !== b[k]) {
       if (Array.isArray(a[k]) && arrayIsEqual(a[k], b[k])) {
-        continue
+        continue;
       }
-      return false
+      return false;
     }
   }
   return true;
@@ -67,6 +68,16 @@ export class Connection {
     this.db = new Database(this.options);
   }
 
+  getEntity(name: string | Function) {
+    return this.options.entities.find(
+      e => e === name || Metadata.get(e, ENTITY_NAME) === name
+    );
+  }
+
+  repositoryFor<T extends object>(entity: string | Function) {
+    return new Repository<T>(this, entity)
+  }
+
   async sync() {
     this.log("Sync...");
 
@@ -75,14 +86,14 @@ export class Connection {
 
     for (let i = 0; i < entityLen; i++) {
       const entity = entities[i];
-      const name = MetadataManager.get(entity, ENTITY_NAME);
-      const indexes = MetadataManager.get(entity, ENTITY_INDEXES);
+      const name = Metadata.get(entity, ENTITY_NAME);
+      const indexes = Metadata.get(entity, ENTITY_INDEXES);
       const collection = this.db.collection(name);
 
       if (!(await collection.exists())) {
         this.log(`Creating "${name}" collection...`);
         await collection.create({
-          waitForSync: !!MetadataManager.get(entity, ENTITY_WAIT_FOR_SYNC)
+          waitForSync: !!Metadata.get(entity, ENTITY_WAIT_FOR_SYNC)
         });
       }
 
@@ -106,7 +117,7 @@ export class Connection {
           this.log(`Updating Index ${index.name} in "${name}" collection...`);
           collection.dropIndex(index.name);
           collection.createIndex(index);
-          continue
+          continue;
         }
         this.log(`Creating Index ${index.name} in "${name}" collection...`);
         collection.createIndex(index);
@@ -116,7 +127,7 @@ export class Connection {
 
   log(...args: any[]) {
     if (this.options.log) {
-      console.log(`CALANGO: `, ...args);
+      console.log(`\x1b[32;4mCALANGO:\x1b[0m`, ...args);
     }
 
     return this;

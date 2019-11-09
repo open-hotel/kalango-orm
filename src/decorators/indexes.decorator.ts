@@ -1,7 +1,7 @@
 import crypto from 'crypto'
-import { ENTITY_INDEXES } from "../keys/entity.keys";
+import { ENTITY_INDEXES, ENTITY_ATTRIBUTES } from "../keys/entity.keys";
 import { ArangoIndex } from "../types/Indexes";
-import { MetadataManager } from "../metadata/MetadataManager";
+import { Metadata } from "../metadata/MetadataManager";
 
 const createIndexName = (index: Partial<ArangoIndex>) => {
   return crypto.createHash('md5').update(JSON.stringify(index)).digest('hex')
@@ -12,14 +12,17 @@ export function Index(options: Partial<ArangoIndex>) {
   return function(target: Object, key: string | symbol) {
     target = key === undefined ? target : target.constructor
 
-    if (key) options.fields.push(key);
+    if (key) {
+      const field = Metadata.get(target, ENTITY_ATTRIBUTES).find(attr => attr.as === key).key
+      options.fields.push(field)
+    }
 
-    const indexes = MetadataManager.get(target, ENTITY_INDEXES) || [];
+    const indexes = Metadata.get(target, ENTITY_INDEXES) || [];
 
     options.name = options.name || `IDX_${createIndexName(options)}`
     indexes.push(options);
 
-    MetadataManager.set(target, ENTITY_INDEXES, indexes);
+    Metadata.set(target, ENTITY_INDEXES, indexes);
   };
 }
 

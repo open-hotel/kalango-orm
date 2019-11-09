@@ -4,7 +4,7 @@ import {
   ENTITY_WAIT_FOR_SYNC,
   ENTITY_INDEXES
 } from "../keys/entity.keys";
-import { MetadataManager } from "../metadata/MetadataManager";
+import { Metadata } from "../metadata/MetadataManager";
 
 export function Entity(
   name?: string,
@@ -13,27 +13,29 @@ export function Entity(
   return function(target) {
     name = name || target.name.toLocaleLowerCase();
 
-    MetadataManager.set(target, ENTITY_NAME, name);
+    Metadata.set(target, ENTITY_NAME, name);
 
-    const attrs = MetadataManager.get(ENTITY_ATTRIBUTES, target) || {};
+    const attrs = Metadata.get(target, ENTITY_ATTRIBUTES) || [];
 
-    MetadataManager.set(target, ENTITY_ATTRIBUTES, attrs);
-    MetadataManager.set(target, ENTITY_WAIT_FOR_SYNC, waitForSync);
+    Metadata.set(target, ENTITY_ATTRIBUTES, attrs);
+    Metadata.set(target, ENTITY_WAIT_FOR_SYNC, waitForSync);
 
-    const indexes = MetadataManager.get(target, ENTITY_INDEXES) || [];
+    const indexes = Metadata.get(target, ENTITY_INDEXES) || [];
 
-    MetadataManager.set(target, ENTITY_INDEXES, indexes);
+    Metadata.set(target, ENTITY_INDEXES, indexes);
   };
 }
 
-export function Attribute(alias?: string | symbol): PropertyDecorator {
+export function Attribute(name?: string | symbol): PropertyDecorator {
   return function(target, key) {
-    console.log("ATTRIBUTE");
+    name = name || key;
 
-    alias = alias || key;
+    const attributes = Metadata.get(target.constructor, ENTITY_ATTRIBUTES) || [];
+    attributes.push({
+      key: name,
+      as: key,
+    })
 
-    const attributes = MetadataManager.get(target, ENTITY_ATTRIBUTES) || {};
-    attributes[alias] = key;
-    MetadataManager.set(target, ENTITY_ATTRIBUTES, attributes);
+    Metadata.set(target.constructor, ENTITY_ATTRIBUTES, attributes);
   };
 }

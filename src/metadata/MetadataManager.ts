@@ -1,4 +1,5 @@
-export class MetadataManager {
+
+export class Metadata {
   private static metas: WeakMap<Object, Map<any, any>> = new WeakMap()
 
   static getAll(target:Object) {

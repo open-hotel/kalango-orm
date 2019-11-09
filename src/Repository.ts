@@ -1,59 +1,63 @@
-import { Database, DocumentCollection } from "arangojs";
-import { AqlQuery, AqlLiteral } from "arangojs/lib/cjs/aql-query";
-import { ArrayCursor } from "arangojs/lib/cjs/cursor";
-import { QueryOptions } from "arangojs/lib/cjs/database";
+import { DocumentCollection } from "arangojs";
 import { DeepPartial } from "./types/DeepPartial";
-import { Document } from "arangojs/lib/cjs/util/types";
-import { DocumentHandle } from "arangojs/lib/cjs/collection";
-import { MetadataManager } from "./metadata/MetadataManager";
-import { ENTITY_NAME } from "./keys/entity.keys";
+import { Metadata } from "./metadata/MetadataManager";
+import { ENTITY_NAME, ENTITY_ATTRIBUTES } from "./keys/entity.keys";
+import { Connection } from "./Connection";
+import { Document, DocumentData } from "arangojs/lib/cjs/util/types";
+import { normalizeDataForWrite, normalizeDataForRead } from "./lib/util";
+import { ArrayOr } from "./types/ArrayOrType";
 
-export class Repository {
-  protected collection: DocumentCollection
+export type EntityDocument<T extends object> = DeepPartial<DocumentData<T>>;
 
-  constructor(
-    private connection: Database,
-    entity: string | Function
-  ) {
-    if (typeof entity === 'function') {
-      entity = MetadataManager.get(entity, ENTITY_NAME)
+export class Repository<T extends object> {
+  protected collection: DocumentCollection;
+  protected entity: Function;
+
+  constructor(protected connection: Connection, entity: string | Function) {
+    if (typeof entity === "function") {
+      entity = Metadata.get(entity, ENTITY_NAME);
     }
 
-    this.collection = connection.collection(entity as string)
+    this.entity = this.connection.getEntity(entity);
+    this.collection = connection.db.collection(entity as string);
   }
 
-  query(query: string | AqlQuery | AqlLiteral): Promise<ArrayCursor>;
-  query(query: AqlQuery, opts?: QueryOptions): Promise<ArrayCursor>;
-  query(
-    query: string | AqlLiteral,
-    bindVars?: any,
-    opts?: QueryOptions
-  ): Promise<ArrayCursor>;
-  query(query, bindVarsOrOptions?, opts?): Promise<ArrayCursor> {
-    if (opts) {
-      return this.connection.query(query, bindVarsOrOptions, opts);
-    }
-    return this.connection.query(query, bindVarsOrOptions);
+  async create(data: EntityDocument<T>): Promise<EntityDocument<T>>;
+  async create(data: EntityDocument<T>[]): Promise<EntityDocument<T>[]>;
+  async create(
+    data: ArrayOr<EntityDocument<T>>
+  ): Promise<ArrayOr<EntityDocument<T>>> {
+    const dataToWrite = normalizeDataForWrite(this.entity, data);
+    const result = await this.collection.save(dataToWrite, { returnNew: true });
+    return normalizeDataForRead<EntityDocument<T>>(this.entity, result.new);
   }
 
-  create<Entity>(
-    entityName: string,
-    plainObject?: DeepPartial<Entity> | DeepPartial<Entity>[]
-  ): Promise<Entity> {
-    return this.collection.save(plainObject, {
-      returnNew: true
+  async update(data: EntityDocument<T>) {
+    const dataToWrite = normalizeDataForWrite(this.entity, data);
+    return this.collection.update(dataToWrite, dataToWrite, {
+      mergeObjects: true
     });
   }
 
-  update<Entity extends Document>(
-    entityName: string,
-    documentHandler: DocumentHandle,
-    newValue: Entity,
-  ): Promise<Entity> {
-    return this.collection.update(documentHandler, newValue);
+  async deleteByKey(key: string);
+  async deleteByKey(keys: string[]);
+  async deleteByKey(keys: ArrayOr<string>) {
+    keys = Array.isArray(keys) ? keys : [keys];
+    return this.collection.removeByKeys(keys, { returnOld: true });
   }
 
-  delete (entityName: string, documentHandler: DocumentHandle) {
-    return this.collection.remove(documentHandler)
+  async findByKey(key: string);
+  async findByKey(keys: string[]);
+  async findByKey(keys: ArrayOr<string>) {
+    const isMulti = Array.isArray(keys);
+    keys = (isMulti ? keys : [keys]) as string[];
+    const result = await this.collection.lookupByKeys(keys)
+    const data = normalizeDataForRead(this.entity, result);
+    return isMulti ? data : data[0]
+  }
+
+  async findBy(doc: ArrayOr<EntityDocument<T>>) {
+    const result = await this.collection.byExample(doc);
+    return normalizeDataForRead(this.entity, result);
   }
 }
